@@ -29,10 +29,21 @@
     ```
     
     *План выполнения:*
-    [Вставьте план выполнения]
+    ```
+    Bitmap Heap Scan on t_books  (cost=21.03..1336.08 rows=750 width=33) (actual time=0.051..0.052 rows=1 loops=1)
+      Recheck Cond: (to_tsvector('english'::regconfig, (title)::text) @@ '''expert'''::tsquery)
+      Heap Blocks: exact=1
+      ->  Bitmap Index Scan on t_books_fts_idx  (cost=0.00..20.84 rows=750 width=0) (actual time=0.044..0.044 rows=1 loops=1)
+            Index Cond: (to_tsvector('english'::regconfig, (title)::text) @@ '''expert'''::tsquery)
+    Planning Time: 0.438 ms
+    Execution Time: 0.087 ms
+    ```
     
     *Объясните результат:*
-    [Ваше объяснение]
+    ```
+    Используется GIN-индекс (Bitmap Index Scan по t_books_fts_idx).
+    Итог: найдена 1 строка => выполнение очень быстрое.
+    ```
 
 6. Удалите индекс:
     ```sql
@@ -90,10 +101,18 @@
      ```
      
      *План выполнения:*
-     [Вставьте план выполнения]
+     ```
+     Index Scan using t_lookup_pk on t_lookup  (cost=0.42..8.44 rows=1 width=23) (actual time=0.044..0.045 rows=1 loops=1)
+       Index Cond: ((item_key)::text = '0000000455'::text)
+     Planning Time: 0.127 ms
+     Execution Time: 0.088 ms
+     ```
      
      *Объясните результат:*
-     [Ваше объяснение]
+     ```
+     Это точечный поиск по первичному ключу.
+     Индекс быстро находит запись.
+     ```
 
 14. Выполните поиск по ключу в кластеризованной таблице:
      ```sql
@@ -102,10 +121,20 @@
      ```
      
      *План выполнения:*
-     [Вставьте план выполнения]
+     ```
+     Index Scan using t_lookup_clustered_pkey on t_lookup_clustered  (cost=0.42..8.44 rows=1 width=23) (actual time=0.021..0.022 rows=1 loops=1)
+       Index Cond: ((item_key)::text = '0000000455'::text)
+     Planning Time: 0.192 ms
+     Execution Time: 0.035 ms
+     ```
      
      *Объясните результат:*
-     [Ваше объяснение]
+     ```
+     Таблица кластеризована по первичному ключу.
+     Для поиска используется индекс по первичному ключу.
+
+     Время выполнения стало ниже.
+     ```
 
 15. Создайте индекс по значению для обычной таблицы:
      ```sql
@@ -125,10 +154,18 @@
      ```
      
      *План выполнения:*
-     [Вставьте план выполнения]
+     ```
+     Index Scan using t_lookup_value_idx on t_lookup  (cost=0.42..8.44 rows=1 width=23) (actual time=0.022..0.022 rows=0 loops=1)
+       Index Cond: ((item_value)::text = 'T_BOOKS'::text)
+     Planning Time: 0.233 ms
+     Execution Time: 0.037 ms
+     ```
      
      *Объясните результат:*
-     [Ваше объяснение]
+     ```
+     Используется btree-индекс t_lookup_value_idx (Index Scan).
+     Время выполнения очень быстрое.
+     ```
 
 18. Выполните поиск по значению в кластеризованной таблице:
      ```sql
@@ -137,12 +174,36 @@
      ```
      
      *План выполнения:*
-     [Вставьте план выполнения]
+     ```
+     Index Scan using t_lookup_clustered_value_idx on t_lookup_clustered  (cost=0.42..8.44 rows=1 width=23) (actual time=0.023..0.023 rows=0 loops=1)
+       Index Cond: ((item_value)::text = 'T_BOOKS'::text)
+     Planning Time: 0.247 ms
+     Execution Time: 0.038 ms
+     ```
      
      *Объясните результат:*
-     [Ваше объяснение]
+     ```
+     Index Scan по t_lookup_clustered_value_idx. 
+     
+     Кластеризация по PK почти не влияет, потому что:
+     - ищем по другому полю (item_value)
+     - используем отдельный индекс по item_value, который сам по себе определяет доступ.
+     
+     Поэтому время практически одинаковое.
+     ```
 
 19. Сравните производительность поиска по значению в обычной и кластеризованной таблицах:
      
      *Сравнение:*
-     [Ваше сравнение]
+     ```
+     По факту, поиск по item_value в обычной и кластеризованной таблицах
+     одинаково быстрый: 0.037 ms и 0.038 ms - разницы нет на практике.
+     
+     Причина:
+     - в обоих случаях используется btree-индекс по item_value
+     - а кластеризация выполнена по первичному ключу item_key.
+     Т.е. физический порядок строк "подогнан" не под этот запрос.
+
+     Где кластеризация дала эффект - это шаги 13 и 14 (поиск по PK): 0.088 ms и 0.035 ms.
+     Физический порядок совпадает с используемым индексом.
+     ```
